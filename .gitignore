@@ -1,0 +1,13 @@
+/.local-tools/
+/.build/
+/dist/
+/WorldAI*.exe
+*.jks
+*.keystore
+*.pfx
+*.p12
+*.dpapi
+*.apk
+*.idsig
+*.log
+*.update-backup

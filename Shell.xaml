@@ -1,0 +1,144 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WorldAI" Width="1270" Height="810" MinWidth="1060" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Brush.Base}"
+        FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="{DynamicResource Brush.Text}" FontSize="13"
+        UseLayoutRounding="True">
+<Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="192"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Background="{DynamicResource Brush.Sidebar}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0" Padding="17,23,17,15">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Bottom" Margin="9,0">
+                    <TextBlock Text="Windows 桌面版" Foreground="{DynamicResource Brush.Muted}" FontSize="11"/>
+                    <TextBlock x:Name="BuildLabel" Foreground="{DynamicResource Brush.Muted}" FontSize="12" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="2,0,0,28">
+                        <Border Width="39" Height="39" CornerRadius="10" Background="{DynamicResource Brush.Selection}">
+                            <TextBlock Text="W" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="WorldAI" FontSize="19" FontWeight="SemiBold"/>
+                            <TextBlock Text="角色与故事" Foreground="{DynamicResource Brush.Muted}" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Button x:Name="NavChat" Style="{StaticResource Nav}" Content="对话"/>
+                    <Button x:Name="NavCharacters" Style="{StaticResource Nav}" Content="角色卡"/>
+                    <Button x:Name="NavBooks" Style="{StaticResource Nav}" Content="世界书"/>
+                    <Button x:Name="NavProfiles" Style="{StaticResource Nav}" Content="玩家身份"/>
+                    <Button x:Name="NavPresets" Style="{StaticResource Nav}" Content="提示词预设"/>
+                    <Border Background="{DynamicResource Brush.Line}" Height="1" Margin="8,14"/>
+                    <Button x:Name="NavModels" Style="{StaticResource Nav}" Content="模型设置"/>
+                    <Button x:Name="NavPreferences" Style="{StaticResource Nav}" Content="全局设置"/>
+                    <Button x:Name="NavData" Style="{StaticResource Nav}" Content="备份与恢复"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid x:Name="ChatPage">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="206"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="228"/>
+                </Grid.ColumnDefinitions>
+                <Border Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0" Padding="15,21">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="会话" FontSize="19" FontWeight="SemiBold" Margin="3,0,0,13"/>
+                            <Button x:Name="NewChat" Content="＋ 新建会话" Style="{StaticResource Primary}" Margin="0,0,0,14"/>
+                        </StackPanel>
+                        <ListBox x:Name="Sessions" BorderThickness="0" Background="Transparent"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                    </DockPanel>
+                </Border>
+
+                <Grid Grid.Column="1">
+                    <Grid x:Name="EmptyChat">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="300">
+                            <TextBlock Text="你的故事从这里开始" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
+                            <TextBlock Text="选一个角色，开一段新的会话。" Foreground="{DynamicResource Brush.Muted}" Margin="0,10,0,20" TextAlignment="Center"/>
+                            <Button x:Name="EmptyNew" Content="新建会话" Style="{StaticResource Primary}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid x:Name="ActiveChat">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1" Padding="17,13">
+                            <DockPanel LastChildFill="True">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="ChatSettings" Content="设置" Padding="9,5"/>
+                                    <Button x:Name="ChatExport" Content="导出" Padding="9,5" Margin="0"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,10,0">
+                                    <TextBlock x:Name="ChatTitle" FontWeight="SemiBold" FontSize="20" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ChatSubtitle" FontSize="12" Foreground="{DynamicResource Brush.Muted}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <ScrollViewer x:Name="ChatScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled" Padding="24,16">
+                            <StackPanel x:Name="Messages" MaxWidth="880"/>
+                        </ScrollViewer>
+                        <Border Grid.Row="2" Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0" Padding="20,12,20,10">
+                            <StackPanel MaxWidth="880">
+                                <TextBox x:Name="Composer" MinHeight="62" MaxHeight="125" AcceptsReturn="True"
+                                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+                                <DockPanel Margin="0,8,0,0">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button x:Name="Retry" Content="重新生成" Padding="8,6"/>
+                                        <Button x:Name="Stop" Content="停止" Padding="8,6" Visibility="Collapsed"/>
+                                        <Button x:Name="Send" Content="发送" Style="{StaticResource Primary}" Padding="15,6" Margin="0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="ChatStatus" Foreground="{DynamicResource Brush.Muted}" FontSize="11" VerticalAlignment="Center"
+                                               TextWrapping="Wrap" Margin="0,0,8,0"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <Border Grid.Column="2" Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0" Padding="16,20">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="ContextPanel">
+                            <Border x:Name="RoleAvatarFrame" Width="58" Height="58" CornerRadius="12"
+                                    HorizontalAlignment="Left" Background="{DynamicResource Brush.Selection}" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="RoleInitial" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               FontSize="23" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold"/>
+                                    <Image x:Name="RoleAvatar" Stretch="UniformToFill"/>
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="RoleName" FontWeight="SemiBold" FontSize="18" Margin="0,8,0,7" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="RoleInfo" Foreground="{DynamicResource Brush.Muted}" TextWrapping="Wrap"/>
+                            <Border Background="{DynamicResource Brush.Line}" Height="1" Margin="0,16"/>
+                            <TextBlock Text="世界书" FontWeight="SemiBold" FontSize="14"/>
+                            <TextBlock x:Name="LoreStatus" Foreground="{DynamicResource Brush.Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <Border Background="{DynamicResource Brush.Line}" Height="1" Margin="0,16"/>
+                            <TextBlock Text="剧情记忆" FontWeight="SemiBold" FontSize="14"/>
+                            <TextBlock x:Name="MemoryStatus" Foreground="{DynamicResource Brush.Muted}" TextWrapping="Wrap" Margin="0,6,0,10"/>
+                            <Button x:Name="ManageMemory" Content="编辑记忆" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <ScrollViewer x:Name="LibraryPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="32,27" MaxWidth="990" HorizontalAlignment="Stretch">
+                    <TextBlock x:Name="LibraryTitle" FontWeight="SemiBold" FontSize="28"/>
+                    <TextBlock x:Name="LibraryHint" Foreground="{DynamicResource Brush.Muted}" Margin="0,6,0,18" TextWrapping="Wrap"/>
+                    <StackPanel x:Name="LibraryActions" Orientation="Horizontal" Margin="0,0,0,16"/>
+                    <StackPanel x:Name="LibraryItems"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>
