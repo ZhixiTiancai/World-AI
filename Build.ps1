@@ -22,6 +22,7 @@ $arguments += $references | ForEach-Object { "/reference:$_" }
 $arguments += "/resource:$PSScriptRoot\Shell.xaml,WorldAI.Shell.xaml"
 $arguments += "/resource:$PSScriptRoot\Theme.xaml,WorldAI.Theme.xaml"
 $arguments += "/resource:$PSScriptRoot\VERSION,WorldAI.Version"
+$arguments += "/resource:$PSScriptRoot\BUILD_REVISION,WorldAI.Revision"
 $arguments += Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | ForEach-Object { $_.FullName }
 & $compiler $arguments
 if ($LASTEXITCODE -ne 0) { throw "Compilation failed ($LASTEXITCODE)." }

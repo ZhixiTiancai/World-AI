@@ -9,9 +9,7 @@ namespace WorldAI
     {
         internal static string UserFolder(string category)
         {
-            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            string root = String.IsNullOrWhiteSpace(documents) ? Path.Combine(Store.Folder, "Files") : Path.Combine(documents, "WorldAI");
-            return Path.Combine(root, category);
+            return Path.Combine(PortablePaths.Files, category);
         }
 
         internal static string Available(string path)

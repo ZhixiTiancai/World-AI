@@ -49,6 +49,7 @@ namespace WorldAI
                 foldersOnly ? "选择此文件夹" : saving ? "保存" : "打开", 750);
             var formats = foldersOnly ? new List<Format>() : ParseFormats(filter);
             var places = new List<Item>();
+            AddPlace(places, "程序目录", PortablePaths.Root);
             AddPlace(places, "桌面", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
             AddPlace(places, "文档", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
             AddPlace(places, "下载", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));

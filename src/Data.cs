@@ -199,8 +199,7 @@ namespace WorldAI
 
     internal static class Store
     {
-        internal static readonly string Folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WorldAI");
+        internal static readonly string Folder = Path.Combine(PortablePaths.Root, "data");
         internal static readonly string DataPath = Path.Combine(Folder, "world.json");
 
         internal static JavaScriptSerializer Json()
@@ -216,6 +215,7 @@ namespace WorldAI
 
         internal static World Load()
         {
+            if (!File.Exists(DataPath)) PortablePaths.ImportLegacy();
             return File.Exists(DataPath) ? Read(DataPath) : Seed();
         }
 

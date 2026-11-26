@@ -57,13 +57,13 @@ namespace WorldAI
         {
             var app = new Application();
             Theme.Initialize(app);
-            try { Theme.Apply(Store.Load().Settings.ThemeId); } catch (Exception) { }
+            try { Theme.Apply(PortablePaths.ReadExistingTheme()); } catch (Exception) { }
             try
             {
-                string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "WorldAI");
+                string root = PortablePaths.Root;
                 var form = new Form(null, "安装 WorldAI " + Updates.Current, "安装", 650);
                 form.Window.ShowInTaskbar = true;
-                form.Note("选择安装位置。安装完成后可从桌面快捷方式打开。");
+                form.Note("默认放在安装器所在目录，也可选其他文件夹。程序、聊天数据和默认备份都跟随 WorldAI.exe。");
                 var path = form.Text("安装文件夹", root);
                 var shortcut = form.Check("创建或更新桌面快捷方式", true);
                 var launch = form.Check("安装后打开 WorldAI", true);
@@ -129,7 +129,7 @@ namespace WorldAI
                         InstallerBundle.Extract(archive, "WorldAI.exe.config", configScratch, 32768);
                         File.Move(configScratch, configuration);
                     }
-                    if (File.Exists(destination)) File.Replace(scratch, destination, destination + ".update-backup");
+                    if (File.Exists(destination)) File.Replace(scratch, destination, Updates.RollbackFile(destination));
                     else File.Move(scratch, destination);
                 }
                 finally

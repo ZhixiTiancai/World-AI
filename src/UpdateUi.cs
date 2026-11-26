@@ -26,7 +26,7 @@ namespace WorldAI
                 using (var token = new CancellationTokenSource(TimeSpan.FromSeconds(12)))
                 {
                     var release = await Updates.Latest(token.Token);
-                    if (Window.IsVisible) AdvertiseUpdate(release != null && release.Version > Updates.Current);
+                    if (Window.IsVisible) AdvertiseUpdate(release != null && release.IsNewer);
                 }
             }
             catch (Exception) { /* Manual checking displays network and release errors. */ }
@@ -55,10 +55,10 @@ namespace WorldAI
                     {
                         release = await Updates.Latest(token.Token);
                         if (!form.Window.IsVisible) return;
-                        bool available = release != null && release.Version > Updates.Current;
+                        bool available = release != null && release.IsNewer;
                         AdvertiseUpdate(available);
                         notes.Text = release == null ? "" : (release.Notes ?? "");
-                        form.Status(available ? "发现新版 " + release.Version :
+                        form.Status(available ? (release.Version == Updates.Current ? "发现 " + release.Version + " 的同版本修复" : "发现新版 " + release.Version) :
                             release == null ? "仓库暂未发布正式版本。" : "已经是最新版本。");
                     }
                     catch (Exception error)
@@ -73,7 +73,7 @@ namespace WorldAI
                         if (form.Window.IsVisible)
                         {
                             form.Busy(false);
-                            form.AcceptButton.IsEnabled = release != null && release.Version > Updates.Current;
+                            form.AcceptButton.IsEnabled = release != null && release.IsNewer;
                         }
                     }
                 }
@@ -108,7 +108,7 @@ namespace WorldAI
             };
             if (form.Show(() =>
             {
-                if (pending != null || release == null || release.Version <= Updates.Current) return false;
+                if (pending != null || release == null || !release.IsNewer) return false;
                 if (work != null || drafts.Values.Any(text => !String.IsNullOrWhiteSpace(text)))
                     throw new InvalidOperationException("请先处理当前回复和未发送的草稿，再更新重启。");
                 install();

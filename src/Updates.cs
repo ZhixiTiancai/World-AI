@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,19 +30,27 @@ namespace WorldAI
         private static readonly string Staging = Path.Combine(Store.Folder, "updates");
         private static readonly HttpClient Client = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
         internal static readonly Version Current = ReadVersion();
+        internal static readonly int CurrentRevision = Int32.Parse(ReadBuildResource("WorldAI.Revision"));
 
         internal sealed class Release
         {
             internal Version Version;
+            internal int Revision;
             internal string Notes;
             internal Uri Download;
             internal string Digest;
+            internal bool IsNewer { get { return Version > Current || (Version == Current && Revision > CurrentRevision); } }
         }
 
         private static Version ReadVersion()
         {
-            using (var stream = typeof(Updates).Assembly.GetManifestResourceStream("WorldAI.Version"))
-            using (var reader = new StreamReader(stream)) return new Version(reader.ReadToEnd().Trim());
+            return new Version(ReadBuildResource("WorldAI.Version"));
+        }
+
+        private static string ReadBuildResource(string name)
+        {
+            using (var stream = typeof(Updates).Assembly.GetManifestResourceStream(name))
+            using (var reader = new StreamReader(stream)) return reader.ReadToEnd().Trim();
         }
 
         internal static async Task<Release> Latest(CancellationToken token)
@@ -61,11 +70,14 @@ namespace WorldAI
                     Version version;
                     if (!Version.TryParse(tag.TrimStart('v', 'V'), out version) || version.Build < 0)
                         throw new InvalidDataException("发行版缺少有效的版本号。");
-                    var release = new Release { Version = version, Notes = Cards.Get(data, "body") as string };
-                    if (version <= Current) return release;
                     var assets = Cards.Get(data, "assets") as object[] ?? new object[0];
                     var asset = assets.FirstOrDefault(item => Equals(Cards.Get(item, "name"), SetupAsset))
                         ?? assets.FirstOrDefault(item => Equals(Cards.Get(item, "name"), WindowsAsset));
+                    var label = Cards.Get(asset, "label") as string ?? "";
+                    var marker = Regex.Match(label, @"\[r([1-9][0-9]{0,7})\]$");
+                    var release = new Release { Version = version, Revision = marker.Success ? Int32.Parse(marker.Groups[1].Value) : 1,
+                        Notes = Cards.Get(data, "body") as string };
+                    if (!release.IsNewer) return release;
                     string name = Cards.Get(asset, "name") as string;
                     string digest = Cards.Get(asset, "digest") as string ?? "";
                     Uri url;
@@ -144,12 +156,16 @@ namespace WorldAI
         {
             Guid parsed;
             if (!Guid.TryParseExact(id, "N", out parsed)) throw new InvalidDataException("无效的更新任务。");
-            string stage = Path.Combine(Staging, parsed.ToString("N"));
+            string stage = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            if (!String.Equals(Path.GetFileName(stage), parsed.ToString("N"), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("无法确认更新缓存位置。");
             var job = Store.Json().Deserialize<UpdateJob>(File.ReadAllText(Path.Combine(stage, "job.json")));
             string helper = Path.Combine(stage, "update-helper.exe");
             if (!String.Equals(Assembly.GetExecutingAssembly().Location, helper, StringComparison.OrdinalIgnoreCase) ||
                 job == null || !Path.IsPathRooted(job.Target) || !ValidDigest(job.Digest) ||
-                !String.Equals(Path.GetFileName(job.Target), "WorldAI.exe", StringComparison.OrdinalIgnoreCase))
+                !String.Equals(Path.GetFileName(job.Target), "WorldAI.exe", StringComparison.OrdinalIgnoreCase) ||
+                !String.Equals(Path.GetFullPath(stage), Path.Combine(Path.GetDirectoryName(Path.GetFullPath(job.Target)),
+                    "data", "updates", parsed.ToString("N")), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("无法确认 WorldAI 的更新位置。");
 
             Process parent;
@@ -186,12 +202,19 @@ namespace WorldAI
                 using (var stream = InstallerBundle.Open(file))
                 using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))
                     InstallerBundle.Extract(zip, "WorldAI.exe", incoming, MaxBytes);
-                File.Replace(incoming, job.Target, job.Target + ".update-backup");
+                File.Replace(incoming, job.Target, RollbackFile(job.Target));
                 try { File.Delete(file); File.Delete(Path.Combine(stage, "job.json")); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
             finally { if (File.Exists(incoming)) File.Delete(incoming); }
+        }
+
+        internal static string RollbackFile(string program)
+        {
+            string folder = Path.Combine(Path.GetDirectoryName(program), "data", "updates");
+            Directory.CreateDirectory(folder);
+            return Path.Combine(folder, "WorldAI.previous.exe");
         }
 
         private static bool ValidDigest(string value)
