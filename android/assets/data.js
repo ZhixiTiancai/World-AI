@@ -55,6 +55,7 @@ function normalize(value) {
             throw new Error('备份中包含无效消息。');
         session.Memories = Array.isArray(session.Memories) ? session.Memories.filter(text => typeof text === 'string') : [];
         session.Updated ||= dateValue();
+        session.ChatBackground = normalizeBackground(session.ChatBackground);
     });
     value.Books.forEach(book => {
         if (!Array.isArray(book.Entries) || book.Entries.some(entry => !entry || typeof entry.Name !== 'string'))
@@ -228,20 +229,44 @@ async function cardFile(file) {
     return {role,lore};
 }
 
-async function avatarFile(file) {
-    if (file.size > 32*1024*1024) throw new Error('头像文件过大。');
+async function imageCanvas(file, maxSide, sourceLimit) {
+    if (file.size > sourceLimit * 1024 * 1024) throw new Error('请选择不超过 '+sourceLimit+' MB 的图片。');
     const url = URL.createObjectURL(file);
     try {
         const image = new Image();
         await new Promise((resolve,reject) => { image.onload=resolve; image.onerror=reject; image.src=url; });
+        if (!image.width || !image.height || image.width*image.height>40000000)
+            throw new Error('图片尺寸超出限制。');
         const canvas = document.createElement('canvas');
-        const scale = Math.min(1,256/Math.max(image.width,image.height));
+        const scale = Math.min(1,maxSide/Math.max(image.width,image.height));
         canvas.width=Math.max(1,Math.round(image.width*scale));
         canvas.height=Math.max(1,Math.round(image.height*scale));
         canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-        return canvas.toDataURL('image/png').split(',')[1];
-    } catch (_) { throw new Error('无法打开头像图片。'); }
+        return canvas;
+    } catch (error) { throw new Error(error.message || '无法读取图片，请换一张 PNG 或 JPG 图片。'); }
     finally { URL.revokeObjectURL(url); }
+}
+
+async function avatarFile(file) {
+    const canvas = await imageCanvas(file,256,32);
+    return canvas.toDataURL('image/png').split(',')[1];
+}
+
+function normalizeBackground(value) {
+    if (!value || typeof value.Image !== 'string' || value.Image.length>2000000 || !value.Image.startsWith('/9j/'))
+        return null;
+    return {Image:value.Image,Shade:integer(value.Shade,0,90,45)};
+}
+
+async function backgroundFile(file) {
+    const canvas = await imageCanvas(file,1920,24);
+    for (const quality of [.86,.72,.56]) {
+        const result = canvas.toDataURL('image/jpeg',quality);
+        const image = result.slice(result.indexOf(',')+1);
+        const value = normalizeBackground({Image:image,Shade:45});
+        if (value) return value;
+    }
+    throw new Error('图片压缩后仍然太大，请换一张较小的图片。');
 }
 
 function importBook(value, name) {

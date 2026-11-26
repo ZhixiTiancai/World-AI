@@ -128,6 +128,16 @@ namespace WorldAI
             var speaker = form.Check("显示说话人名称", session.ShowSpeaker);
             var avatar = form.Check("在角色消息旁显示头像", session.ShowCharacterAvatar);
             var refocus = form.Check("发送后把焦点放回输入框", session.RefocusComposer);
+            var wallpaper = form.InlineAction(BackgroundLabel(session.ChatBackground));
+            wallpaper.Click += (sender, args) => Guard(() =>
+            {
+                ChatBackdrop updated;
+                if (!PickChatBackground(form.Window, session.ChatBackground, out updated)) return;
+                session.ChatBackground = updated;
+                wallpaper.Content = BackgroundLabel(updated);
+            });
+            wallpaper.HorizontalAlignment = HorizontalAlignment.Left;
+            form.Add("聊天背景", wallpaper);
             bool removed = false;
             if (existing != null)
                 form.Action("删除会话", () =>
@@ -201,6 +211,7 @@ namespace WorldAI
 
         private void RenderChat()
         {
+            RenderChatBackground();
             if (active == null) { RenderMessages(); return; }
             var role = Context.Find(world.Characters, active.CharacterId);
             var profile = Context.Player(world, active);
@@ -533,7 +544,7 @@ namespace WorldAI
             var role = Context.Find(world.Characters, session.CharacterId);
             var profile = Context.Player(world, session);
             string content = System.IO.Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase)
-                ? Store.Json().Serialize(session)
+                ? Store.Json().Serialize(session.WithoutBackground())
                 : session.Name + "\n\n" + String.Join("\n\n", session.Messages.Select(message =>
                     (message.Role == "user" ? (profile == null ? "你" : profile.Name) : (role == null ? "角色" : role.Name)) + "\n" + message.Text));
             Store.Write(path, content, false);

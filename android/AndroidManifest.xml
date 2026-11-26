@@ -3,7 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="WorldAI" android:icon="@drawable/worldai_icon" android:theme="@android:style/Theme.Material.NoActionBar"
                  android:usesCleartextTraffic="true" android:allowBackup="false" android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden"
+        <activity android:name=".MainActivity" android:exported="true" android:enableOnBackInvokedCallback="true"
+                  android:configChanges="orientation|screenSize|keyboardHidden"
                   android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

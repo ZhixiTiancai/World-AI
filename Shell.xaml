@@ -75,6 +75,7 @@
                         <Border Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1" Padding="17,13">
                             <DockPanel LastChildFill="True">
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="ChatBackground" Content="背景" Padding="9,5"/>
                                     <Button x:Name="ChatSettings" Content="设置" Padding="9,5"/>
                                     <Button x:Name="ChatExport" Content="导出" Padding="9,5" Margin="0"/>
                                 </StackPanel>
@@ -84,10 +85,13 @@
                                 </StackPanel>
                             </DockPanel>
                         </Border>
-                        <ScrollViewer x:Name="ChatScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled" Padding="24,16">
-                            <StackPanel x:Name="Messages" MaxWidth="880"/>
-                        </ScrollViewer>
+                        <Grid Grid.Row="1" ClipToBounds="True" Background="{DynamicResource Brush.Base}">
+                            <Image x:Name="ChatWallpaper" Stretch="UniformToFill" IsHitTestVisible="False"/>
+                            <ScrollViewer x:Name="ChatScroll" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled" Padding="24,16">
+                                <StackPanel x:Name="Messages" MaxWidth="880"/>
+                            </ScrollViewer>
+                        </Grid>
                         <Border Grid.Row="2" Background="{DynamicResource Brush.Panel}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0" Padding="20,12,20,10">
                             <StackPanel MaxWidth="880">
                                 <TextBox x:Name="Composer" MinHeight="62" MaxHeight="125" AcceptsReturn="True"

@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
@@ -17,12 +18,16 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.window.OnBackInvokedDispatcher;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.*;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -64,20 +69,42 @@ public final class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
-                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+                Intent intent = openDocument(params.getAcceptTypes());
                 try { startActivityForResult(intent, 11); }
                 catch (Exception error) { fileCallback.onReceiveValue(null); fileCallback = null; }
                 return true;
             }
         });
         setContentView(web);
+        if (Build.VERSION.SDK_INT >= 33)
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
         web.loadUrl(LOCAL);
     }
 
     @Override public void onBackPressed() {
+        handleBack();
+    }
+
+    private void handleBack() {
         web.evaluateJavascript("window.worldBack && window.worldBack()", handled -> {
             if (!"true".equals(handled)) finish();
         });
+    }
+
+    private static Intent openDocument(String[] accepts) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+        if (accepts == null) return intent;
+        Set<String> mimeTypes = new LinkedHashSet<>();
+        for (String accept : accepts) {
+            for (String raw : accept.split(",")) {
+                String mime = raw.trim().toLowerCase(Locale.ROOT);
+                if (mime.startsWith(".")) return intent;
+                if (mime.contains("/")) mimeTypes.add(mime);
+            }
+        }
+        if (mimeTypes.size() == 1) return intent.setType(mimeTypes.iterator().next());
+        if (!mimeTypes.isEmpty()) intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes.toArray(new String[0]));
+        return intent;
     }
 
     @Override protected void onActivityResult(int code, int result, Intent value) {

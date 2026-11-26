@@ -225,18 +225,106 @@ function editMemory(session) {
     });
 }
 
+function wallpaperImage(background) {
+    const image=element('img',undefined,'room-wallpaper');
+    image.alt='';
+    image.hidden=!background;
+    image.onerror=() => image.hidden=true;
+    if (background) {
+        image.src='data:image/jpeg;base64,'+background.Image;
+        image.style.opacity=String(1-background.Shade/100);
+    }
+    return image;
+}
+
+function editChatBackground(saved,apply) {
+    let draft=normalizeBackground(saved);
+    dialog('聊天背景',modal => {
+        modal.body.append(element('p','背景只用于当前会话。恢复后会跟随主题。','note'));
+        const preview=element('div',undefined,'wallpaper-preview');
+        modal.body.append(preview);
+        const slider=field(modal,'主题遮罩',draft?.Shade ?? 45,{type:'range'});
+        slider.min='0';
+        slider.max='90';
+        slider.step='1';
+        const level=element('p',undefined,'muted');
+        modal.body.append(level);
+        const image=wallpaperImage(null);
+        preview.append(image);
+        function refresh() {
+            slider.disabled=!draft;
+            image.hidden=!draft;
+            if (draft) {
+                const source='data:image/jpeg;base64,'+draft.Image;
+                if (image.getAttribute('src')!==source) image.src=source;
+                image.style.opacity=String(1-draft.Shade/100);
+            } else image.removeAttribute('src');
+            level.textContent=draft ? draft.Shade+'% · 数值越高，图片越淡' : '当前跟随主题';
+        }
+        slider.addEventListener('input',() => {
+            if (draft) draft.Shade=Number(slider.value);
+            refresh();
+        });
+        const actions=element('div',undefined,'buttons');
+        const chooseImage=button('选择图片',() => readFile('image/png,image/jpeg',async file => {
+            const loaded=await backgroundFile(file);
+            draft=Object.assign(loaded,{Shade:Number(slider.value)});
+            refresh();
+        }),'primary');
+        actions.append(chooseImage,button('恢复主题背景',() => { draft=null; refresh(); }));
+        modal.body.append(actions);
+        refresh();
+        saveButton(modal,() => apply(draft));
+    });
+}
+
+const settingSections = {
+    appearance:['外观','配色主题',renderAppearance],
+    defaults:['聊天默认值','默认模型、全局提示词和上下文',renderPreferences],
+    models:['模型设置','API、密钥与模型列表',renderModels],
+    identity:['玩家身份','全局身份和会话身份',renderIdentities],
+    presets:['提示词预设','写作风格和模型指令',renderPresets],
+    backup:['备份与恢复','本地数据和跨端迁移',renderBackup],
+    updates:['软件更新','版本和启动时自动检测',renderUpdates]
+};
+
+function openSettingPage(key) {
+    settingPage=key;
+    render();
+    page.scrollTop=0;
+}
+
 function renderSettings() {
-    heading('设置',button('检查更新',() => checkUpdates(false)));
+    if (settingPage && settingSections[settingPage]) {
+        const [title,,draw]=settingSections[settingPage];
+        heading(title,button('‹ 设置',() => openSettingPage(null)));
+        draw();
+        return;
+    }
+    heading('设置');
+    const menu=element('div',undefined,'settings-menu');
+    for (const [key,[title,summary]] of Object.entries(settingSections)) {
+        const row=button('',() => openSettingPage(key),'settings-link');
+        const details=element('span');
+        details.append(element('strong',title),element('small',summary));
+        const arrow=element('span','›','settings-arrow');
+        arrow.setAttribute('aria-hidden','true');
+        row.append(details,arrow);
+        menu.append(row);
+    }
+    page.append(menu);
+}
+
+function renderAppearance() {
     const colors=Object.entries(themes).map(([key,label]) => {
         const option=button(label,() => { commit(() => world.Settings.ThemeId=key); applyTheme(); },'theme');
         option.setAttribute('aria-pressed',String(world.Settings.ThemeId===key));
         return option;
     });
-    card('外观','主题立即生效。',colors);
-    card('聊天默认值','最近 '+world.Settings.HistoryCount+' 条消息'+
-        (world.Settings.ContextCharacters ? ' · 最多 '+world.Settings.ContextCharacters+' 字符' : ' · 发送字数不设限'),
-        [button('编辑默认值',editPreferences)]);
+    card('配色主题','选择后立即生效。',colors);
+}
 
+function renderModels() {
     card('模型设置','添加 OpenAI 兼容接口。',[button('＋ 添加模型',() => editModel(null),'primary')]);
     world.Models.forEach(model => {
         if (model.Demo) return;
@@ -249,7 +337,9 @@ function renderSettings() {
                 bridge.setKey(slot(model.Id,model.Endpoint),'');
             }),'danger')]);
     });
+}
 
+function renderIdentities() {
     card('玩家身份',find(world.Profiles,world.Settings.DefaultProfileId)?.Name || '未设置全局身份',[
         button('＋ 新建身份',() => editNamed('Profiles',null)),
         ...(world.Settings.DefaultProfileId ? [button('清除全局',() => commit(() => world.Settings.DefaultProfileId=null))] : [])
@@ -258,11 +348,17 @@ function renderSettings() {
         button('编辑',() => editNamed('Profiles',profile)),
         button('设为全局',() => commit(() => world.Settings.DefaultProfileId=profile.Id)),
         button('删除',() => deleteNamed('Profiles',profile),'danger')]));
+}
+
+function renderPresets() {
     card('提示词预设','保存风格与模型指令。',[button('＋ 新建预设',() => editNamed('Presets',null))]);
     world.Presets.forEach(preset => card(preset.Name,snippet(preset.Style || preset.SystemPrompt),[
         button('编辑',() => editNamed('Presets',preset)),button('删除',() => deleteNamed('Presets',preset),'danger')]));
 
-    card('备份与恢复','可以和桌面版交换备份。API 密钥单独保存在本机。',[
+}
+
+function renderBackup() {
+    card('本地数据','可以和桌面版交换备份。API 密钥单独保存在本机。',[
         button('导出备份',() => exportJson('WorldAI-backup-'+new Date().toISOString().slice(0,10),world)),
         button('恢复备份',() => readFile('.json',async file => {
             if (file.size>32*1024*1024) throw new Error('备份超过 32 MB。');
@@ -281,19 +377,34 @@ function renderSettings() {
     ]);
 }
 
-function editPreferences() {
-    dialog('聊天默认值',modal => {
-        const settings=world.Settings;
-        const model=choose(modal,'默认模型',listOptions(world.Models,'自动选择'),settings.DefaultModelId);
-        const prompt=field(modal,'全局提示词',settings.SystemPrompt,{rows:5});
-        const count=field(modal,'发送历史条数（1–500）',settings.HistoryCount,{type:'number'});
-        const limit=field(modal,'发送字数上限（0 不限）',settings.ContextCharacters,{type:'number'});
-        const size=field(modal,'每页显示条数（10–500）',settings.PageSize,{type:'number'});
-        const automatic=check(modal,'每次打开时检查更新',settings.CheckUpdatesOnStart);
-        saveButton(modal,() => commit(() => world.Settings={...settings,
+function renderPreferences() {
+    const settings=world.Settings;
+    const body=element('section',undefined,'card');
+    page.append(body);
+    const panel={body};
+    const model=choose(panel,'默认模型',listOptions(world.Models,'自动选择'),settings.DefaultModelId);
+    const prompt=field(panel,'全局提示词',settings.SystemPrompt,{rows:5});
+    const count=field(panel,'发送历史条数（1–500）',settings.HistoryCount,{type:'number'});
+    const limit=field(panel,'发送字数上限（0 不限）',settings.ContextCharacters,{type:'number'});
+    const size=field(panel,'每页显示条数（10–500）',settings.PageSize,{type:'number'});
+    body.append(button('保存默认值',() => {
+        commit(() => world.Settings={...world.Settings,
             DefaultModelId:model.value || null,SystemPrompt:prompt.value.trim(),
             HistoryCount:numberField(count,1,500,'发送历史条数'),ContextCharacters:contextLimit(limit),
-            PageSize:numberField(size,10,500,'每页显示条数'),CheckUpdatesOnStart:automatic.checked}));
+            PageSize:numberField(size,10,500,'每页显示条数')});
+        notify('已保存聊天默认值。');
+    },'primary'));
+}
+
+function renderUpdates() {
+    const body=card('当前版本','WorldAI '+version,[
+        button('检查更新',() => checkUpdates(false),'primary'),
+        button('打开 GitHub 发行页',() => bridge.releasePage(false))
+    ]);
+    const automatic=check({body},'每次打开时检查更新',world.Settings.CheckUpdatesOnStart);
+    automatic.addEventListener('change',() => {
+        try { commit(() => world.Settings.CheckUpdatesOnStart=automatic.checked); }
+        catch (error) { notify(error.message,true); }
     });
 }
 

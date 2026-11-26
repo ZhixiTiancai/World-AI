@@ -30,6 +30,15 @@ textarea{resize:vertical;min-height:90px;white-space:pre-wrap}input:focus,textar
 #page.thread{display:flex;flex-direction:column;padding:0;overflow:hidden}
 .thread-head{padding:9px 12px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}.thread-head h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history{padding:12px;overflow:auto;flex:1;min-height:0;overscroll-behavior:contain}.line{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:12px}.line.mine{align-items:flex-end}.line .tools{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:11px}.tools button{padding:0 5px;min-height:24px;background:transparent;border-color:transparent;color:var(--muted)}
+.thread-log{flex:1;min-height:0;display:flex;flex-direction:column;position:relative;background:var(--base);overflow:hidden}
+.thread-log .history{position:relative}
+.room-wallpaper{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.with-wallpaper .tools{background:var(--panel);border-radius:6px;padding:0 5px;margin-bottom:2px}
+.wallpaper-preview{position:relative;overflow:hidden;margin:0 0 12px;background:var(--base);border:1px solid var(--line);border-radius:10px;aspect-ratio:16/8;min-height:126px}
+input[type="range"]{accent-color:var(--accent)}
+.settings-menu{display:grid;gap:8px}
+.settings-link{width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;min-height:60px;border-radius:12px;padding:11px 14px;background:var(--card)}
+.settings-link strong{font-size:15px}.settings-link small{margin-top:2px}.settings-arrow{font-size:22px;color:var(--muted)}
 .bubble{white-space:pre-wrap;overflow-wrap:anywhere;max-width:94%;padding:9px 11px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
 .mine .bubble{background:var(--select)}.composer{display:flex;align-items:end;gap:8px;background:var(--panel);border-top:1px solid var(--line);padding:9px 11px}
 .composer textarea{min-height:45px;max-height:110px;resize:none}.composer button{flex:none}

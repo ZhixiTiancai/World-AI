@@ -6,7 +6,7 @@ const overlay = document.getElementById('modal');
 const notice = document.getElementById('notice');
 const dialogs = [];
 const drafts = new Map();
-let world, loadError, selected = null, route = 'chat', pendingChat = null, visibleMessages = null, toast;
+let world, loadError, selected = null, route = 'chat', settingPage = null, pendingChat = null, visibleMessages = null, toast;
 
 function element(tag, text, className) {
     const node = document.createElement(tag);
@@ -201,7 +201,9 @@ function go(target) {
     if (pendingChat) return;
     route = target;
     selected = null;
+    settingPage = null;
     render();
+    page.scrollTop=0;
 }
 
 function render() {
@@ -287,6 +289,12 @@ function editSession(old) {
         const book = check(modal,'使用挂载的世界书',draft.UseWorldBook !== false);
         const font = field(modal,'聊天字号（10–32）',draft.MessageFontSize || 14,{type:'number'});
         const speaker = check(modal,'显示说话人名称',draft.ShowSpeaker !== false);
+        const background = button(draft.ChatBackground ? '聊天背景 · 自定义图片' : '聊天背景 · 跟随主题',() =>
+            editChatBackground(draft.ChatBackground,value => {
+                draft.ChatBackground=value;
+                background.textContent=value ? '聊天背景 · 自定义图片' : '聊天背景 · 跟随主题';
+            }));
+        modal.body.append(background);
         if (old) modal.foot.append(button('删除',() => ask('删除会话','删除这段对话和剧情记忆？',() => {
             commit(() => world.Sessions=world.Sessions.filter(session => session.Id!==old.Id),false);
             selected=null;
@@ -385,15 +393,30 @@ function renderThread() {
     text.addEventListener('input',() => drafts.set(session.Id,text.value));
     const send=button(pendingChat ? '停止' : '发送',() => pendingChat ? pendingChat.cancel() : generate(session,text.value,false),'primary');
     compose.append(text,send);
-    page.append(header,history,compose);
+    const scene=element('div',undefined,'thread-log');
+    if (session.ChatBackground) {
+        scene.append(wallpaperImage(session.ChatBackground));
+        history.classList.add('with-wallpaper');
+    }
+    scene.append(history);
+    page.append(header,scene,compose);
     requestAnimationFrame(() => history.scrollTop=history.scrollHeight);
 }
 
 function threadActions(session) {
     dialog('会话功能',modal => {
-        modal.body.append(button('重新生成',() => { modal.close(); return generate(session,'',true); }),
+        const tools=element('div',undefined,'buttons');
+        tools.append(button('重新生成',() => { modal.close(); return generate(session,'',true); }),
             button('剧情记忆',() => { modal.close(); editMemory(session); }),
-            button('导出聊天记录',() => exportJson(session.Name,session)));
+            button('聊天背景',() => {
+                modal.close();
+                editChatBackground(session.ChatBackground,value => commit(() => session.ChatBackground=value));
+            }),
+            button('导出聊天记录',() => {
+                const {ChatBackground,...textOnly}=session;
+                exportJson(session.Name,textOnly);
+            }));
+        modal.body.append(tools);
     });
 }
 
@@ -471,6 +494,7 @@ async function generate(session,value,retry) {
 window.worldBack = () => {
     if (dialogs.length) { dialogs[dialogs.length-1].close(); return true; }
     if (pendingChat) { pendingChat.cancel(); return true; }
+    if (route==='settings' && settingPage) { openSettingPage(null); return true; }
     if (selected || route!=='chat') { go('chat'); return true; }
     return false;
 };

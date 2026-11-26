@@ -133,6 +133,7 @@ namespace WorldAI
         public bool ShowSpeaker { get; set; }
         public bool ShowCharacterAvatar { get; set; }
         public bool RefocusComposer { get; set; }
+        public ChatBackdrop ChatBackground { get; set; }
 
         public Session()
         {
@@ -146,6 +147,20 @@ namespace WorldAI
             ShowSpeaker = true;
             RefocusComposer = true;
         }
+
+        internal Session WithoutBackground()
+        {
+            var copy = (Session)MemberwiseClone();
+            copy.ChatBackground = null;
+            return copy;
+        }
+    }
+
+    public class ChatBackdrop
+    {
+        public string Image { get; set; }
+        public int Shade { get; set; }
+        public ChatBackdrop() { Shade = 45; }
     }
 
     public class World
@@ -226,6 +241,7 @@ namespace WorldAI
                 if (session.ContextCharacters.HasValue && !IsContextLimit(session.ContextCharacters.Value))
                     session.ContextCharacters = null;
                 if (session.MessageFontSize < 10 || session.MessageFontSize > 32) session.MessageFontSize = 14;
+                session.ChatBackground = ChatImages.Normalize(session.ChatBackground);
             }
             return world;
         }

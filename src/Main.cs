@@ -85,6 +85,7 @@ namespace WorldAI
             On("NewChat", () => EditSession(null));
             On("EmptyNew", () => EditSession(null));
             On("ChatSettings", () => EditSession(active));
+            On("ChatBackground", ChangeChatBackground);
             On("ChatExport", ExportChat);
             On("ManageMemory", ManageMemory);
             UI<Button>("Send").Click += async (sender, args) => await Send(false);
@@ -190,7 +191,7 @@ namespace WorldAI
         private void SetBusy(bool busy)
         {
             foreach (string key in Pages) UI<Button>("Nav" + key).IsEnabled = !busy;
-            foreach (string key in new[] { "NewChat", "EmptyNew", "ChatSettings", "ChatExport", "ManageMemory", "Send", "Retry" })
+            foreach (string key in new[] { "NewChat", "EmptyNew", "ChatSettings", "ChatBackground", "ChatExport", "ManageMemory", "Send", "Retry" })
                 UI<Button>(key).IsEnabled = !busy;
             UI<ListBox>("Sessions").IsEnabled = !busy;
             UI<Button>("Stop").Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
