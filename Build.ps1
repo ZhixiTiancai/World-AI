@@ -1,4 +1,4 @@
-param([string]$OutputPath = (Join-Path $PSScriptRoot 'WorldAI.exe'))
+param([string]$OutputPath = (Join-Path $PSScriptRoot 'WorldAI.exe'), [switch]$Setup)
 
 $ErrorActionPreference = 'Stop'
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
@@ -16,6 +16,8 @@ $references = @(
     (Join-Path $framework 'System.IO.Compression.dll')
 )
 $arguments = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/codepage:65001', "/out:$OutputPath")
+$arguments += if ($Setup) { '/main:WorldAI.SetupProgram' } else { '/main:WorldAI.Program' }
+$arguments += "/win32icon:$PSScriptRoot\assets\WorldAI.ico"
 $arguments += $references | ForEach-Object { "/reference:$_" }
 $arguments += "/resource:$PSScriptRoot\Shell.xaml,WorldAI.Shell.xaml"
 $arguments += "/resource:$PSScriptRoot\Theme.xaml,WorldAI.Theme.xaml"

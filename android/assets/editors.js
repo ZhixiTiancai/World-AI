@@ -135,7 +135,7 @@ function renderBooks() {
         const book=importBook(JSON.parse((await file.text()).replace(/^\uFEFF/,'')),file.name.replace(/\.json$/i,''));
         commit(() => world.Books.push(book));
         notify('已导入 '+book.Entries.length+' 条设定。');
-    })),button('＋ 新建',() => editBook(null),'primary'));
+    })),button('语义设置',editSemanticSettings),button('＋ 新建',() => editBook(null),'primary'));
     for (const book of world.Books) {
         card(book.Name,book.Entries.length+' 条设定',[button('编辑',() => editBook(book)),
             button('导出',() => exportJson(book.Name,bookExport(book))),
@@ -169,6 +169,8 @@ function editBook(old) {
                 const title=field(inner,'条目名',entry.Name);
                 const words=field(inner,'关键词（逗号分隔）',entry.Keywords);
                 const content=field(inner,'设定正文',entry.Content,{rows:7});
+                const mode=choose(inner,'匹配方式',[['keyword','按关键词'],['semantic','按意思（语义检索）'],
+                    ['both','关键词或意思命中即可']],retrievalMode(entry.Retrieval));
                 const enabled=check(inner,'启用',entry.Enabled !== false);
                 const always=check(inner,'始终加入设定',entry.Always);
                 saveButton(inner,() => {
@@ -177,6 +179,7 @@ function editBook(old) {
                     entry.Content=required(content,'设定正文');
                     entry.Enabled=enabled.checked;
                     entry.Always=always.checked;
+                    entry.Retrieval=mode.value;
                     if (index<0) book.Entries.push(entry);
                     else book.Entries[index]=entry;
                     draw();
@@ -188,6 +191,19 @@ function editBook(old) {
             book.Name=required(name,'世界书名称');
             commit(() => updateItem('Books',old,book));
         });
+    });
+}
+
+function editSemanticSettings() {
+    dialog('语义检索设置',modal => {
+        const api=choose(modal,'向量 API 配置',listOptions(world.Models.filter(model => !model.Demo),'停用语义检索'),world.Settings.SemanticApiId);
+        const model=field(modal,'向量模型 ID',world.Settings.EmbeddingModel);
+        modal.body.append(element('p','选择支持 /embeddings 的 API。应用会把用于匹配的设定片段和刚发送的玩家消息交给该服务计算向量。关键词和常驻设定照常使用。','note'));
+        saveButton(modal,() => commit(() => {
+            const value=api.value ? required(model,'向量模型 ID') : model.value.trim();
+            world.Settings.SemanticApiId=api.value || null;
+            world.Settings.EmbeddingModel=value;
+        }));
     });
 }
 
@@ -333,6 +349,7 @@ function renderModels() {
                 removeItem('Models',model.Id,() => {
                     world.Sessions.forEach(session => { if (session.ModelId===model.Id) session.ModelId=null; });
                     if (world.Settings.DefaultModelId===model.Id) world.Settings.DefaultModelId=null;
+                    if (world.Settings.SemanticApiId===model.Id) world.Settings.SemanticApiId=null;
                 });
                 bridge.setKey(slot(model.Id,model.Endpoint),'');
             }),'danger')]);
@@ -358,8 +375,16 @@ function renderPresets() {
 }
 
 function renderBackup() {
+    const folder=bridge.backupFolder();
+    card('默认备份位置',folder || '每次导出时选择位置。',[
+        button('选择备份文件夹',() => bridge.chooseBackupFolder()),
+        ...(folder ? [button('每次询问',() => bridge.clearBackupFolder())] : [])
+    ]);
     card('本地数据','可以和桌面版交换备份。API 密钥单独保存在本机。',[
-        button('导出备份',() => exportJson('WorldAI-backup-'+new Date().toISOString().slice(0,10),world)),
+        button('导出备份',() => {
+            const stamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+            bridge.exportBackup('WorldAI-backup-'+stamp+'.json',JSON.stringify(world,null,2));
+        }),
         button('恢复备份',() => readFile('.json',async file => {
             if (file.size>32*1024*1024) throw new Error('备份超过 32 MB。');
             const recovered=normalize(JSON.parse((await file.text()).replace(/^\uFEFF/,'')));

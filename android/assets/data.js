@@ -12,6 +12,7 @@ const item = (name, fields = {}) => Object.assign({Id:uid(),Name:name}, fields);
 const find = (list, id) => list.find(value => value.Id === id);
 const clone = value => JSON.parse(JSON.stringify(value));
 const keywords = value => String(value || '').split(/[,，、;\n；]/).map(word => word.trim()).filter(Boolean);
+const retrievalMode = value => ['semantic','both'].includes(value) ? value : 'keyword';
 const snippet = (value, limit = 100) => {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     return text.length > limit ? text.slice(0, limit) + '…' : text;
@@ -39,6 +40,7 @@ function normalize(value) {
     if (records.some(entry => !entry || typeof entry.Id !== 'string' || typeof entry.Name !== 'string') ||
         new Set(records.map(entry => entry.Id)).size !== records.length) throw new Error('备份中包含无效记录。');
     value.Settings = Object.assign(defaults(), value.Settings);
+    delete value.Settings.BackupDirectory;
     value.Settings.HistoryCount = integer(value.Settings.HistoryCount, 1, 500, 40);
     value.Settings.PageSize = integer(value.Settings.PageSize, 10, 500, 100);
     value.Settings.ContextCharacters = integer(value.Settings.ContextCharacters, 0, 500000, 0);
@@ -60,6 +62,7 @@ function normalize(value) {
     value.Books.forEach(book => {
         if (!Array.isArray(book.Entries) || book.Entries.some(entry => !entry || typeof entry.Name !== 'string'))
             throw new Error('备份中包含无效世界书。');
+        book.Entries.forEach(entry => entry.Retrieval=retrievalMode(entry.Retrieval));
     });
     return value;
 }
@@ -96,6 +99,11 @@ function request(action, params = {}, chunk = () => {}) {
 
 window.worldEvent = (id, kind, text) => {
     if (id === 'export') { notify(text, kind === 'error'); return; }
+    if (id === 'backup-folder') {
+        if (kind !== 'error' && route==='settings' && settingPage==='backup') render();
+        notify(text,kind==='error');
+        return;
+    }
     const listener = callbacks.get(id);
     if (!listener) return;
     if (kind === 'chunk') { listener.chunk(text); return; }
@@ -123,7 +131,94 @@ function expand(text, role, profile, now = new Date()) {
         (_, key) => String(parts[key.toLowerCase()]).padStart(2, '0'));
 }
 
-function buildContext(world, session, history) {
+function loreEntries(world,session) {
+    const role=find(world.Characters,session.CharacterId);
+    const book=session.UseWorldBook!==false && find(world.Books,role?.BookId);
+    return book ? book.Entries.filter(entry => entry.Enabled!==false && String(entry.Content || '').trim()) : [];
+}
+
+function keywordLore(world,session,recent) {
+    const text=recent.slice(-6).map(message => message.Text.toLowerCase()).join('\n');
+    return loreEntries(world,session).filter(entry => entry.Always ||
+        (entry.Retrieval!=='semantic' && keywords(entry.Keywords).some(word => text.includes(word.toLowerCase()))));
+}
+
+const vectorCache=new Map();
+
+async function semanticLore(world,session,recent,matched,control) {
+    const used=new Set(matched.map(entry => entry.Id));
+    const entries=loreEntries(world,session).filter(entry => ['semantic','both'].includes(entry.Retrieval) && !used.has(entry.Id));
+    const latest=[...recent].reverse().find(message => message.Role==='user' && message.Text.trim());
+    if (!entries.length || !latest) return [];
+    const api=find(world.Models,world.Settings.SemanticApiId);
+    const model=world.Settings.EmbeddingModel;
+    if (!api || api.Demo || !model) throw new Error('请在世界书里配置语义检索。');
+    if (vectorCache.size>2048) vectorCache.clear();
+    const jobs=[];
+    for (const entry of entries) {
+        const chars=Array.from(entry.Content);
+        for (let i=0;i<chars.length;i+=1600) {
+            const text=chars.slice(i,i+1600).join('').trim();
+            if (!text) continue;
+            const key=JSON.stringify([api.Id,api.Endpoint,model,entry.Name,text]);
+            jobs.push({entry,text,key});
+            if (jobs.length>640) throw new Error('参与语义检索的设定太多，请把世界书拆小一些。');
+        }
+    }
+    let current=null, stopped=false;
+    const timer=setTimeout(() => {
+        stopped=true;
+        if (current) current.cancel();
+    },40000);
+    control.cancel=() => {
+        control.aborted=true;
+        if (current) current.cancel();
+    };
+    async function embed(input) {
+        if (control.aborted || stopped) throw new Error('已停止检索。');
+        current=request('embeddings',modelConfig(api,{name:model,input}));
+        const rows=JSON.parse(await current.promise).data;
+        if (!Array.isArray(rows) || rows.length!==input.length) throw new Error('向量接口未返回完整结果。');
+        const vectors=new Map();
+        for (const row of rows) {
+            const index=row?.index, vector=row?.embedding;
+            if (!Number.isInteger(index) || index<0 || index>=input.length || vectors.has(index) ||
+                !Array.isArray(vector) || vector.length<2 || vector.length>8192 || vector.some(value => !Number.isFinite(value)))
+                throw new Error('向量接口的响应格式不兼容。');
+            vectors.set(index,vector);
+        }
+        return input.map((_,i) => vectors.get(i));
+    }
+    try {
+        const missing=[...new Map(jobs.filter(job => !vectorCache.has(job.key)).map(job => [job.key,job])).values()];
+        for (let i=0;i<missing.length;i+=16) {
+            const batch=missing.slice(i,i+16);
+            const vectors=await embed(batch.map(job => job.entry.Name+'\n'+job.text));
+            batch.forEach((job,index) => vectorCache.set(job.key,vectors[index]));
+        }
+        const [query]=await embed([Array.from(latest.Text).slice(-1600).join('')]);
+        const ranked=jobs.map(job => {
+            const vector=vectorCache.get(job.key);
+            if (vector.length!==query.length) { vectorCache.clear(); throw new Error('向量维度发生变化，请重试。'); }
+            let dot=0, left=0, right=0;
+            for(let i=0;i<query.length;i++){dot+=query[i]*vector[i];left+=query[i]*query[i];right+=vector[i]*vector[i];}
+            return {...job,score:left && right ? dot/Math.sqrt(left*right) : 0};
+        }).filter(job => job.score>=.42).sort((a,b) => b.score-a.score);
+        const hits=[];
+        for(const job of ranked) {
+            if (used.has(job.entry.Id)) continue;
+            used.add(job.entry.Id);
+            hits.push({...job.entry,Content:job.text});
+            if(hits.length===4) break;
+        }
+        return hits;
+    } catch (error) {
+        if (stopped) throw new Error('等待超时。');
+        throw error;
+    } finally { clearTimeout(timer); }
+}
+
+function buildContext(world, session, history, semantic = []) {
     const role = find(world.Characters, session.CharacterId);
     const profile = player(world, session);
     const preset = find(world.Presets, session.PresetId);
@@ -143,16 +238,11 @@ function buildContext(world, session, history) {
     let left = limit ? limit - system.length - lastLength : Infinity;
     if (left < 0) throw new Error('提示词和最新消息超过发送字数上限，请调整会话设置。');
     let omitted = 0;
-    const book = session.UseWorldBook !== false && find(world.Books, role?.BookId);
-    if (book) {
-        const scan = recent.slice(-6).map(message => message.Text.toLowerCase()).join('\n');
-        for (const entry of book.Entries) {
-            if (entry.Enabled === false || !(entry.Always || keywords(entry.Keywords).some(word => scan.includes(word.toLowerCase())))) continue;
+    for (const entry of [...keywordLore(world,session,recent),...semantic]) {
             const text = expand(segment('世界设定「'+entry.Name+'」',entry.Content),role,profile,now);
             if (text.length > left) { omitted++; continue; }
             system += text;
             left -= text.length;
-        }
     }
     let first = Math.max(0,recent.length-1);
     while (first > 0 && recent[first-1].Text.length <= left) left -= recent[--first].Text.length;
@@ -276,7 +366,8 @@ function importBook(value, name) {
         const keys = entry.keys ?? entry.key;
         return item(String(entry.comment || entry.name || '条目 '+(i+1)),{
             Keywords:Array.isArray(keys) ? keys.filter(word => typeof word === 'string').join(', ') : String(keys || ''),
-            Content:String(entry.content || ''),Enabled:entry.disable !== true && entry.enabled !== false,Always:entry.constant === true});
+            Content:String(entry.content || ''),Enabled:entry.disable !== true && entry.enabled !== false,Always:entry.constant === true,
+            Retrieval:retrievalMode(entry.extensions?.worldai_retrieval)});
     })});
 }
 
@@ -284,7 +375,8 @@ function bookExport(book) {
     const entries = {};
     book.Entries.forEach((entry,i) => entries[i] = {uid:i,key:keywords(entry.Keywords),keysecondary:[],
         comment:entry.Name,content:entry.Content || '',disable:entry.Enabled === false,constant:entry.Always === true,
-        order:i,position:0,probability:100,useProbability:false,selective:false,displayIndex:i});
+        order:i,position:0,probability:100,useProbability:false,selective:false,displayIndex:i,
+        extensions:{worldai_retrieval:retrievalMode(entry.Retrieval)}});
     return {name:book.Name,entries};
 }
 
@@ -295,7 +387,8 @@ function roleExport(role, book) {
         extensions:role.Avatar ? {worldai_avatar_png:role.Avatar} : {}};
     if (book) data.character_book = {name:book.Name,extensions:{},entries:book.Entries.map((entry,i) => ({
         id:i,name:entry.Name,keys:keywords(entry.Keywords),secondary_keys:[],enabled:entry.Enabled !== false,
-        constant:entry.Always === true,content:entry.Content,insertion_order:i,selective:false,extensions:{}}))};
+        constant:entry.Always === true,content:entry.Content,insertion_order:i,selective:false,
+        extensions:{worldai_retrieval:retrievalMode(entry.Retrieval)}}))};
     return {spec:'chara_card_v2',spec_version:'2.0',data};
 }
 

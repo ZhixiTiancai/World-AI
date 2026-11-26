@@ -59,7 +59,7 @@ namespace WorldAI
         private bool rebuildingSessions;
         private readonly Dictionary<Session, string> drafts = new Dictionary<Session, string>();
 
-        private static readonly string[] Pages = { "Chat", "Characters", "Books", "Profiles", "Presets", "Models", "Preferences", "Data" };
+        private static readonly string[] Pages = { "Chat", "Characters", "Books", "Profiles", "Presets", "Models", "Preferences", "Data", "Folders" };
 
         internal Shell()
         {
@@ -76,6 +76,9 @@ namespace WorldAI
             var content = (UIElement)Window.Content;
             Window.Content = null;
             WindowFrame.Attach(Window, content, true);
+            Window.AllowDrop = true;
+            Window.PreviewDragOver += OnFileDrag;
+            Window.PreviewDrop += OnFileDrop;
 
             foreach (string key in Pages)
             {
@@ -235,16 +238,16 @@ namespace WorldAI
             catch (Exception) { return null; }
         }
 
-        private string OpenFile(string filter)
+        private string OpenFile(string filter, string folder = null)
         {
-            return FilePicker.Open(Form.CurrentOwner(Window), filter);
+            return FilePicker.Open(Form.CurrentOwner(Window), filter, WorkFiles.Available(folder ?? WorkFiles.UserFolder("")));
         }
 
-        private string ExportFile(string filter, string extension, string filename)
+        private string ExportFile(string filter, string extension, string filename, string folder = null)
         {
             char[] invalid = Path.GetInvalidFileNameChars();
             string suggestion = new string(filename.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
-            string path = FilePicker.Save(Form.CurrentOwner(Window), filter, extension, suggestion);
+            string path = FilePicker.Save(Form.CurrentOwner(Window), filter, extension, suggestion, WorkFiles.Available(folder ?? WorkFiles.UserFolder("")));
             if (path == null) return null;
             if (String.Equals(path, Store.DataPath, StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(path, Store.DataPath + ".previous", StringComparison.OrdinalIgnoreCase))

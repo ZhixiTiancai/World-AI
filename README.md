@@ -4,7 +4,7 @@
 
 ## 启动
 
-双击同目录的 WorldAI.exe。首次打开会看到「雾港来信」示例会话，输入一句话后点击「发送」或按 Ctrl + Enter。离线演示只播放内置回复，不调用真实模型。
+从 Release 下载并双击 WorldAI-Setup.exe，选择安装文件夹，然后从桌面快捷方式启动。首次打开会看到「雾港来信」示例会话。离线演示只播放内置回复。
 
 Android 下载 WorldAI-android.apk，通过系统安装器安装，并使用当前版本的 Android System WebView。Android 的「设置」会分别打开外观、聊天默认值、模型、玩家身份、提示词预设、备份恢复和软件更新页面。
 
@@ -18,7 +18,19 @@ Android 下载 WorldAI-android.apk，通过系统安装器安装，并使用当�
 
 「角色卡」可以新建和导入；给角色挂载世界书后，对话右侧会显示当前命中的条目。「编辑记忆」可以手工添加重要事件，或生成并修改剧情摘要。「对话 → 导出」可导出 TXT 或 JSON。
 
-「世界书 → 导出」可将单本世界书保存为 JSON，用于 WorldAI 或 SillyTavern 导入。导出包含名称、正文、关键词、启用状态和常驻标记。Android 可用相同格式导入导出世界书。
+「世界书 → 导出」可将单本世界书保存为 JSON，用于 WorldAI 或 SillyTavern 导入。WorldAI 两端会保留条目的匹配方式。Windows 可以把一个或多个角色卡或世界书文件直接拖到角色卡页或世界书页。
+
+## 世界书与语义检索
+
+- **关键词**：在最近聊天中命中配置的词时加入正文。旧条目默认使用此模式。
+- **按意思**：在「世界书 → 语义检索设置」选择支持 OpenAI 兼容 /embeddings 的 API 配置，并填入该服务的向量模型 ID。软件用最新玩家消息检索同一世界书内的相关设定片段。向量请求可能把这些文字发送到所选服务。
+- **两者都按**：任一种命中即可，重复命中的条目只加入一次。常驻条目始终优先参加上下文。向量服务未配置或请求失败时，关键词和常驻条目照常工作。
+
+## 文件目录
+
+Windows 左侧「文件目录」提供角色卡、世界书、聊天记录、背景图、备份、应用数据及程序目录的快捷入口。前四类默认放在「文档 → WorldAI」下，原文件所在位置不变。
+
+Windows 在「备份与恢复 → 自定义备份位置」设置默认文件夹。Android 在「设置 → 备份与恢复」可授权固定的默认文件夹，或在每次导出时选择保存位置。备份位置是本机配置。
 
 ## 编辑角色卡
 
@@ -64,4 +76,4 @@ Android 从源码构建需要 JDK、Android 35 平台和 Android SDK Build Tools
 
     .\Build-Android.ps1 -Jdk <JDK目录> -BuildTools <构建工具目录> -AndroidJar <android.jar> -Keystore <发行签名文件>
 
-两个构建读取同一个 VERSION。运行 Package-Windows.ps1 可生成桌面发行 ZIP。发布正式版时，对应 GitHub 标签使用 v 加版本号，附上 WorldAI-windows-x64.zip 以及 WorldAI-android.apk。签名文件和密钥保存在私有位置。
+两个构建读取同一个 VERSION。运行 Package-Windows.ps1 生成带选择目录和快捷方式的 WorldAI-Setup.exe，以及供旧版更新器读取的兼容 ZIP。发布时使用 v 加版本号的标签，并附上 EXE 和 WorldAI-android.apk。仍需从 1.2.0 及更早版本自动升级时，同时附上兼容 ZIP。签名文件和密钥保存在私有位置。

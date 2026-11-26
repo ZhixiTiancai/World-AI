@@ -69,7 +69,7 @@ namespace WorldAI
                         id = index, name = entry.Name, content = entry.Content ?? "",
                         keys = SplitKeywords(entry.Keywords), secondary_keys = new string[0],
                         enabled = entry.Enabled, constant = entry.Always, selective = false,
-                        insertion_order = index, extensions = new Dictionary<string, object>()
+                        insertion_order = index, extensions = new { worldai_retrieval = Entry.Mode(entry.Retrieval) }
                     }).ToArray()
                 };
             }
@@ -83,6 +83,13 @@ namespace WorldAI
             return ReadLore(root, Path.GetFileNameWithoutExtension(path));
         }
 
+        internal static bool IsWorldBook(string path)
+        {
+            CheckSize(path);
+            var data = Store.Json().DeserializeObject(File.ReadAllText(path, Encoding.UTF8).TrimStart('\uFEFF').Trim());
+            return Get(data, "entries") != null;
+        }
+
         internal static string ExportLore(Lore book)
         {
             var entries = new Dictionary<string, object>();
@@ -93,7 +100,7 @@ namespace WorldAI
                     uid = i, key = SplitKeywords(entry.Keywords), keysecondary = new string[0],
                     comment = entry.Name, content = entry.Content ?? "", disable = !entry.Enabled,
                     constant = entry.Always, selective = false, order = i, position = 0, probability = 100,
-                    useProbability = false, displayIndex = i
+                    useProbability = false, displayIndex = i, extensions = new { worldai_retrieval = Entry.Mode(entry.Retrieval) }
                 });
             }
             return Store.Json().Serialize(new { name = book.Name, entries = entries });
@@ -119,7 +126,8 @@ namespace WorldAI
                     Name = String.IsNullOrWhiteSpace(entryName) ? "条目 " + (lore.Entries.Count + 1) : entryName,
                     Keywords = words == null ? (keywords as string ?? "") : String.Join(", ", words.OfType<string>()),
                     Content = ReadText(raw, "content"), Enabled = !Equals(Get(raw, "disable"), true) && !Equals(Get(raw, "enabled"), false),
-                    Always = Equals(Get(raw, "constant"), true)
+                    Always = Equals(Get(raw, "constant"), true),
+                    Retrieval = Entry.Mode(Get(Get(raw, "extensions"), "worldai_retrieval"))
                 });
             }
             return lore;

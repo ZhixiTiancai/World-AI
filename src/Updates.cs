@@ -24,6 +24,7 @@ namespace WorldAI
     {
         internal const string Repository = "ZhixiTiancai/World-AI";
         internal const string WindowsAsset = "WorldAI-windows-x64.zip";
+        internal const string SetupAsset = "WorldAI-Setup.exe";
         private const long MaxBytes = 64 * 1024 * 1024;
         private static readonly string Staging = Path.Combine(Store.Folder, "updates");
         private static readonly HttpClient Client = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
@@ -63,12 +64,14 @@ namespace WorldAI
                     var release = new Release { Version = version, Notes = Cards.Get(data, "body") as string };
                     if (version <= Current) return release;
                     var assets = Cards.Get(data, "assets") as object[] ?? new object[0];
-                    var asset = assets.FirstOrDefault(item => Equals(Cards.Get(item, "name"), WindowsAsset));
+                    var asset = assets.FirstOrDefault(item => Equals(Cards.Get(item, "name"), SetupAsset))
+                        ?? assets.FirstOrDefault(item => Equals(Cards.Get(item, "name"), WindowsAsset));
+                    string name = Cards.Get(asset, "name") as string;
                     string digest = Cards.Get(asset, "digest") as string ?? "";
                     Uri url;
                     if (!ValidDigest(digest) || !Uri.TryCreate(Cards.Get(asset, "browser_download_url") as string,
                         UriKind.Absolute, out url) || url.Scheme != "https" || url.Host != "github.com" ||
-                        !String.Equals(url.AbsolutePath, "/" + Repository + "/releases/download/" + tag + "/" + WindowsAsset,
+                        !String.Equals(url.AbsolutePath, "/" + Repository + "/releases/download/" + tag + "/" + name,
                             StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("新版本未附带可校验的 Windows 更新包。");
                     release.Download = url;
@@ -180,16 +183,9 @@ namespace WorldAI
             string incoming = job.Target + "." + Guid.NewGuid().ToString("N") + ".next";
             try
             {
-                using (var stream = File.OpenRead(file))
+                using (var stream = InstallerBundle.Open(file))
                 using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))
-                {
-                    var entry = zip.GetEntry("WorldAI.exe");
-                    if (entry == null || entry.Length < 1024 || entry.Length > MaxBytes)
-                        throw new InvalidDataException("更新包里的程序文件无效。");
-                    using (var source = entry.Open())
-                    using (var destination = new FileStream(incoming, FileMode.CreateNew))
-                        source.CopyTo(destination);
-                }
+                    InstallerBundle.Extract(zip, "WorldAI.exe", incoming, MaxBytes);
                 File.Replace(incoming, job.Target, job.Target + ".update-backup");
                 try { File.Delete(file); File.Delete(Path.Combine(stage, "job.json")); }
                 catch (IOException) { }

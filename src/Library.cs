@@ -26,7 +26,7 @@ namespace WorldAI
             {
                 case "Characters":
                     title.Text = "角色卡";
-                    hint.Text = "创建自己的角色，或导入 SillyTavern 的 PNG / JSON 角色卡。";
+                    hint.Text = "创建自己的角色，或把 PNG / JSON 角色卡拖到此页导入。";
                     actions.Children.Add(Button("＋ 新建角色", () => EditCharacter(null), true));
                     actions.Children.Add(Button("导入角色卡", ImportCharacter));
                     foreach (var role in world.Characters)
@@ -40,9 +40,10 @@ namespace WorldAI
                     break;
                 case "Books":
                     title.Text = "世界书";
-                    hint.Text = "在角色卡里挂载世界书。生成时匹配最近 6 条消息，也可以让条目始终启用。";
+                    hint.Text = "可直接拖入世界书 JSON。条目支持关键词、语义检索和常驻设定。";
                     actions.Children.Add(Button("＋ 新建世界书", () => EditLore(null), true));
                     actions.Children.Add(Button("导入 JSON", ImportLore));
+                    actions.Children.Add(Button("语义检索设置", EditSemanticSettings));
                     foreach (var book in world.Books)
                         Row(book.Name, book.Entries.Count + " 个条目", null,
                             Button("编辑", () => EditLore(book)),
@@ -95,6 +96,7 @@ namespace WorldAI
                             {
                                 foreach (var session in world.Sessions.Where(session => session.ModelId == model.Id)) session.ModelId = null;
                                 if (world.Settings.DefaultModelId == model.Id) world.Settings.DefaultModelId = null;
+                                if (world.Settings.SemanticApiId == model.Id) world.Settings.SemanticApiId = null;
                             })));
                     }
                     break;
@@ -119,7 +121,14 @@ namespace WorldAI
                     hint.Text = "导出角色、世界书、模型设置、会话和记忆。备份不含 API 密钥。";
                     actions.Children.Add(Button("导出备份", Backup, true));
                     actions.Children.Add(Button("恢复备份", Restore));
-                    Row("本地数据目录", Store.Folder, null);
+                    FolderRow("备份文件夹", BackupFolder, "导出和恢复时的默认位置");
+                    actions.Children.Add(Button("自定义备份位置", EditBackupFolder));
+                    FolderRow("应用数据", Store.Folder, "聊天和设置保存在这里");
+                    break;
+                case "Folders":
+                    title.Text = "文件目录";
+                    hint.Text = "按用途打开常用文件夹。导入和导出也会默认打开对应目录。";
+                    ShowFolders();
                     break;
             }
             if (items.Children.Count == 0)

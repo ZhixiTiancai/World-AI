@@ -158,7 +158,8 @@ namespace WorldAI
             });
             form.Action("选择图片", () =>
             {
-                string path = FilePicker.Open(form.Window, "图片 (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg");
+                string path = FilePicker.Open(form.Window, "图片 (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg",
+                    WorkFiles.Available(WorkFiles.UserFolder("背景图")));
                 if (path == null) return;
                 data = ChatImages.Import(path);
                 preview.Source = ChatImages.Decode(new ChatBackdrop { Image = data });

@@ -82,7 +82,15 @@ namespace WorldAI
         public string Content { get; set; }
         public bool Enabled { get; set; }
         public bool Always { get; set; }
-        public Entry() { Enabled = true; }
+        public string Retrieval { get; set; }
+        public Entry() { Enabled = true; Retrieval = "keyword"; }
+        internal bool UsesKeywords { get { return Retrieval != "semantic"; } }
+        internal bool UsesSemantics { get { return Retrieval == "semantic" || Retrieval == "both"; } }
+        internal static string Mode(object value)
+        {
+            string mode = value as string;
+            return mode == "semantic" || mode == "both" ? mode : "keyword";
+        }
     }
 
     public class Message
@@ -95,6 +103,9 @@ namespace WorldAI
     {
         public string DefaultModelId { get; set; }
         public string DefaultProfileId { get; set; }
+        public string SemanticApiId { get; set; }
+        public string EmbeddingModel { get; set; }
+        public string BackupDirectory { get; set; }
         public string ThemeId { get; set; }
         public bool CheckUpdatesOnStart { get; set; }
         public string SystemPrompt { get; set; }
@@ -280,6 +291,7 @@ namespace WorldAI
                 String.Equals(Path.GetFullPath(path), DataPath + ".previous", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("请选择一个独立的备份文件。");
             var portable = Copy(world);
+            portable.Settings.BackupDirectory = null;
             foreach (var model in portable.Models) model.EncryptedKey = null;
             Write(path, Json().Serialize(portable), false);
         }

@@ -8,20 +8,25 @@ namespace WorldAI
 {
     internal static class Context
     {
-        internal static List<Entry> Matches(World world, Session session, IEnumerable<Message> history)
+        internal static List<Entry> EnabledEntries(World world, Session session)
         {
             var role = Find(world.Characters, session.CharacterId);
             var book = role == null ? null : Find(world.Books, role.BookId);
             if (!session.UseWorldBook || book == null) return new List<Entry>();
+            return book.Entries.Where(entry => entry.Enabled && !String.IsNullOrWhiteSpace(entry.Content)).ToList();
+        }
+
+        internal static List<Entry> Matches(World world, Session session, IEnumerable<Message> history)
+        {
             string recent = String.Join("\n", Tail(history, 6).Select(message => message.Text));
-            return book.Entries.Where(entry => entry.Enabled && !String.IsNullOrWhiteSpace(entry.Content)
-                && (entry.Always || (entry.Keywords ?? "").Split(new[] { ',', '，', '\n', '、', ';', '；' },
+            return EnabledEntries(world, session).Where(entry => entry.Always ||
+                (entry.UsesKeywords && (entry.Keywords ?? "").Split(new[] { ',', '，', '\n', '、', ';', '；' },
                     StringSplitOptions.RemoveEmptyEntries).Select(keyword => keyword.Trim())
                     .Any(keyword => keyword.Length > 0 && recent.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)))
                 .ToList();
         }
 
-        internal static List<Message> Build(World world, Session session, IEnumerable<Message> history,
+        internal static List<Message> Build(World world, Session session, IEnumerable<Message> history, IEnumerable<Entry> matches,
             out int omittedMessages, out int omittedEntries)
         {
             var role = Find(world.Characters, session.CharacterId);
@@ -65,7 +70,7 @@ namespace WorldAI
             long remaining = limit == 0 ? long.MaxValue : limit - instructions.Length - latestSize;
             var system = new StringBuilder(instructions);
             omittedEntries = 0;
-            foreach (var entry in Matches(world, session, recent))
+            foreach (var entry in matches)
             {
                 var block = new StringBuilder();
                 Add(block, "世界设定「" + entry.Name + "」", entry.Content);

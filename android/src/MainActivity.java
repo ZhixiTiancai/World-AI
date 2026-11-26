@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.AtomicFile;
@@ -43,6 +44,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private AtomicFile data;
     private SharedPreferences vault;
+    private SharedPreferences localFiles;
     private ValueCallback<Uri[]> fileCallback;
     private String exportText;
     private String version;
@@ -51,6 +53,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         data = new AtomicFile(new File(getFilesDir(), "world.json"));
         vault = getSharedPreferences("local-model-keys", MODE_PRIVATE);
+        localFiles = getSharedPreferences("worldai-local-files", MODE_PRIVATE);
         try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
         catch (Exception error) { version = "0.0.0"; }
         web = new WebView(this);
@@ -124,6 +127,32 @@ public final class MainActivity extends Activity {
                     emit("export", "done", "已保存文件。");
                 } catch (Exception error) { emit("export", "error", reason(error)); }
             });
+        } else if (code == 13 && uri != null) {
+            try {
+                int access = value.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if ((access & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == 0) throw new IOException("此位置没有写入权限。");
+                getContentResolver().takePersistableUriPermission(uri, access);
+                Uri previous = backupLocation();
+                if (!localFiles.edit().putString("backup-folder", uri.toString()).commit())
+                    throw new IOException("无法保存备份位置。");
+                if (previous != null && !previous.equals(uri)) releaseBackupLocation(previous);
+                emit("backup-folder", "done", "已保存默认备份位置。");
+            } catch (Exception error) { emit("backup-folder", "error", reason(error)); }
+        }
+    }
+
+    private Uri backupLocation() {
+        String value = localFiles.getString("backup-folder", "");
+        return value.isEmpty() ? null : Uri.parse(value);
+    }
+
+    private void releaseBackupLocation(Uri uri) {
+        for (android.content.UriPermission permission : getContentResolver().getPersistedUriPermissions()) {
+            if (!uri.equals(permission.getUri())) continue;
+            int flags = (permission.isReadPermission() ? Intent.FLAG_GRANT_READ_URI_PERMISSION : 0) |
+                (permission.isWritePermission() ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
+            try { getContentResolver().releasePersistableUriPermission(uri, flags); }
+            catch (SecurityException ignored) { }
         }
     }
 
@@ -208,6 +237,59 @@ public final class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface public String backupFolder() {
+            Uri uri = backupLocation();
+            if (uri == null) return "";
+            try { return DocumentsContract.getTreeDocumentId(uri); }
+            catch (IllegalArgumentException error) { return uri.getAuthority(); }
+        }
+
+        @JavascriptInterface public void chooseBackupFolder() {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                Uri current = backupLocation();
+                if (current != null) intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, current);
+                try { startActivityForResult(intent, 13); }
+                catch (Exception error) { emit("backup-folder", "error", reason(error)); }
+            });
+        }
+
+        @JavascriptInterface public void clearBackupFolder() {
+            Uri previous = backupLocation();
+            if (!localFiles.edit().remove("backup-folder").commit()) {
+                emit("backup-folder", "error", "无法清除备份位置。");
+                return;
+            }
+            if (previous != null) releaseBackupLocation(previous);
+            emit("backup-folder", "done", "每次导出时会询问保存位置。");
+        }
+
+        @JavascriptInterface public void exportBackup(String name, String content) {
+            Uri uri = backupLocation();
+            if (uri == null) { exportFile(name, "application/json", content); return; }
+            worker.execute(() -> {
+                Uri created = null;
+                try {
+                    Uri folder = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri));
+                    created = DocumentsContract.createDocument(getContentResolver(), folder, "application/json", name);
+                    if (created == null) throw new IOException("无法创建备份文件。");
+                    try (OutputStream output = getContentResolver().openOutputStream(created, "wt")) {
+                        if (output == null) throw new IOException("无法写入备份文件。");
+                        output.write(content.getBytes(StandardCharsets.UTF_8));
+                    }
+                    emit("export", "done", "已备份到所选文件夹。");
+                } catch (Exception error) {
+                    if (created != null) {
+                        try { DocumentsContract.deleteDocument(getContentResolver(), created); }
+                        catch (Exception ignored) { }
+                    }
+                    emit("export", "error", "备份失败，请重新选择备份位置：" + reason(error));
+                }
+            });
+        }
+
         @JavascriptInterface public void releasePage(boolean apk) {
             runOnUiThread(() -> {
                 String destination = apk ? GITHUB + "/download/WorldAI-android.apk" : GITHUB;
@@ -255,7 +337,7 @@ public final class MainActivity extends Activity {
         return new String(cipher.doFinal(Base64.decode(pieces[1], Base64.DEFAULT)), StandardCharsets.UTF_8);
     }
 
-    private static URL modelUrl(String address, boolean list) throws Exception {
+    private static URL modelUrl(String address, String action) throws Exception {
         URI base = new URI(address.trim());
         String scheme = base.getScheme();
         if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) ||
@@ -264,32 +346,35 @@ public final class MainActivity extends Activity {
         String path = base.getPath().replaceAll("/+$", "");
         if (path.endsWith("/chat/completions")) path = path.substring(0, path.length() - "/chat/completions".length());
         else if (path.isEmpty()) path = "/v1";
-        return new URI(scheme, null, base.getHost(), base.getPort(), path + (list ? "/models" : "/chat/completions"),
+        String endpoint = action.equals("models") ? "/models" : action.equals("embeddings") ? "/embeddings" : "/chat/completions";
+        return new URI(scheme, null, base.getHost(), base.getPort(), path + endpoint,
             base.getQuery(), null).toURL();
     }
 
     private void requestModel(String id, String action, JSONObject params, Call call) throws Exception {
         boolean release = action.equals("release");
         boolean list = action.equals("models");
-        if (!release && !list && !action.equals("chat")) throw new IOException("未知请求。");
-        URL url = release ? new URL(RELEASE_API) : modelUrl(params.getString("endpoint"), list);
+        boolean embeddings = action.equals("embeddings");
+        if (!release && !list && !embeddings && !action.equals("chat")) throw new IOException("未知请求。");
+        URL url = release ? new URL(RELEASE_API) : modelUrl(params.getString("endpoint"), action);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         call.connection = connection;
         call.check();
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000);
-        connection.setReadTimeout(release || list ? 20000 : 120000);
+        connection.setReadTimeout(release || list || embeddings ? 20000 : 120000);
         connection.setRequestProperty("User-Agent", "WorldAI-Android/" + version);
         if (!release) {
             String key = params.optString("key", "");
             if (key.isEmpty() && params.optBoolean("useSaved")) key = getKey(params.optString("modelId"));
             if (!key.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + key);
         }
-        boolean stream = !release && !list && params.optBoolean("stream", true);
+        boolean stream = action.equals("chat") && params.optBoolean("stream", true);
         connection.setRequestProperty("Accept", release ? "application/vnd.github+json" : stream ? "text/event-stream" : "application/json");
         if (!release && !list) {
-            JSONObject body = new JSONObject().put("model", params.getString("name")).put("stream", stream)
-                .put("messages", params.getJSONArray("messages"));
+            JSONObject body = new JSONObject().put("model", params.getString("name"));
+            if (embeddings) body.put("input", params.getJSONArray("input"));
+            else body.put("stream", stream).put("messages", params.getJSONArray("messages"));
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
@@ -311,7 +396,7 @@ public final class MainActivity extends Activity {
             throw new IOException(message);
         }
         try (InputStream input = connection.getInputStream()) {
-            if (release || list) { emit(id, "done", read(input, 8 * 1024 * 1024)); return; }
+            if (release || list || embeddings) { emit(id, "done", read(input, 8 * 1024 * 1024)); return; }
             String type = connection.getContentType();
             if (type != null && type.startsWith("text/event-stream")) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));

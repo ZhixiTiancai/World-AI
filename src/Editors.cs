@@ -208,7 +208,7 @@ namespace WorldAI
 
         private void ImportCharacter()
         {
-            string path = OpenFile("角色卡 (*.png;*.json)|*.png;*.json");
+            string path = OpenFile("角色卡 (*.png;*.json)|*.png;*.json", WorkFiles.UserFolder("角色卡"));
             if (path == null) return;
             Lore book;
             var role = Cards.Import(path, out book);
@@ -231,7 +231,7 @@ namespace WorldAI
 
         private void ExportCharacter(Character role)
         {
-            string path = ExportFile("角色卡 (*.json)|*.json", "json", role.Name);
+            string path = ExportFile("角色卡 (*.json)|*.json", "json", role.Name, WorkFiles.UserFolder("角色卡"));
             if (path == null) return;
             Store.Write(path, Cards.Export(role, Context.Find(world.Books, role.BookId)), false);
             Info("角色卡已导出。");
@@ -249,7 +249,7 @@ namespace WorldAI
 
         private void ImportLore()
         {
-            string path = OpenFile("世界书 (*.json)|*.json");
+            string path = OpenFile("世界书 (*.json)|*.json", WorkFiles.UserFolder("世界书"));
             if (path == null) return;
             var book = Cards.ImportLore(path);
             Put(world.Books, null, book);
@@ -259,7 +259,7 @@ namespace WorldAI
 
         private void ExportLore(Lore book)
         {
-            string path = ExportFile("世界书 (*.json)|*.json", "json", book.Name);
+            string path = ExportFile("世界书 (*.json)|*.json", "json", book.Name, WorkFiles.UserFolder("世界书"));
             if (path == null) return;
             Store.Write(path, Cards.ExportLore(book), false);
             Info("世界书已导出。");
@@ -320,6 +320,12 @@ namespace WorldAI
             var name = form.Text("条目标题", entry.Name);
             var keywords = form.Text("关键词（用逗号分隔）", entry.Keywords);
             var content = form.Text("设定内容", entry.Content, 150);
+            var modes = new[] {
+                new Item { Id = "keyword", Name = "按关键词" },
+                new Item { Id = "semantic", Name = "按意思（语义检索）" },
+                new Item { Id = "both", Name = "关键词或意思命中即可" }
+            };
+            var mode = form.Choice("匹配方式", modes, Entry.Mode(entry.Retrieval), null);
             var enabled = form.Check("启用条目", entry.Enabled);
             var always = form.Check("始终加入设定，无需关键词", entry.Always);
             return form.Show(() =>
@@ -331,6 +337,7 @@ namespace WorldAI
                 entry.Keywords = keywords.Text.Trim();
                 entry.Enabled = enabled.IsChecked == true;
                 entry.Always = always.IsChecked == true;
+                entry.Retrieval = Entry.Mode(Form.Selected(mode));
                 return true;
             });
         }

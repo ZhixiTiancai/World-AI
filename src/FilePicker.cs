@@ -27,21 +27,27 @@ namespace WorldAI
             public string Label { get; set; }
         }
 
-        internal static string Open(Window owner, string filter)
+        internal static string Open(Window owner, string filter, string initialFolder = null)
         {
-            return Select(owner, filter, null, null);
+            return Select(owner, filter, null, null, initialFolder, false);
         }
 
-        internal static string Save(Window owner, string filter, string extension, string name)
+        internal static string Save(Window owner, string filter, string extension, string name, string initialFolder = null)
         {
-            return Select(owner, filter, extension, name);
+            return Select(owner, filter, extension, name, initialFolder, false);
         }
 
-        private static string Select(Window owner, string filter, string extension, string suggestedName)
+        internal static string ChooseFolder(Window owner, string initialFolder)
+        {
+            return Select(owner, null, null, null, initialFolder, true);
+        }
+
+        private static string Select(Window owner, string filter, string extension, string suggestedName, string initialFolder, bool foldersOnly)
         {
             bool saving = extension != null;
-            var form = new Form(owner, saving ? "保存文件" : "选择文件", saving ? "保存" : "打开", 750);
-            var formats = ParseFormats(filter);
+            var form = new Form(owner, foldersOnly ? "选择文件夹" : saving ? "保存文件" : "选择文件",
+                foldersOnly ? "选择此文件夹" : saving ? "保存" : "打开", 750);
+            var formats = foldersOnly ? new List<Format>() : ParseFormats(filter);
             var places = new List<Item>();
             AddPlace(places, "桌面", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
             AddPlace(places, "文档", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
@@ -53,13 +59,13 @@ namespace WorldAI
             form.Add(null, navigation);
             var files = new ListBox { Height = 260, DisplayMemberPath = "Label" };
             ScrollViewer.SetHorizontalScrollBarVisibility(files, ScrollBarVisibility.Disabled);
-            form.Add("文件与文件夹", files);
-            var name = form.Text("文件名或完整路径", suggestedName);
-            var format = form.Choice("文件类型", formats, formats[0].Id, null);
+            form.Add(foldersOnly ? "子文件夹（双击进入）" : "文件与文件夹", files);
+            var name = foldersOnly ? null : form.Text("文件名或完整路径", suggestedName);
+            var format = foldersOnly ? null : form.Choice("文件类型", formats, formats[0].Id, null);
 
-            string folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string folder = Directory.Exists(initialFolder) ? initialFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (!Directory.Exists(folder)) folder = AppDomain.CurrentDomain.BaseDirectory;
-            Func<Format> currentFormat = () => Context.Find(formats, Form.Selected(format));
+            Func<Format> currentFormat = () => format == null ? null : Context.Find(formats, Form.Selected(format));
             Action<string> navigate = address =>
             {
                 string next = Path.GetFullPath(Environment.ExpandEnvironmentVariables(address.Trim().Trim('"')));
@@ -69,7 +75,7 @@ namespace WorldAI
                     .Where(item => (item.Attributes & FileAttributes.Hidden) == 0)
                     .Select(item => new FileRow { Path = item.FullName, IsFolder = item is DirectoryInfo,
                         Label = (item is DirectoryInfo ? "▸  " : "     ") + item.Name })
-                    .Where(item => item.IsFolder || type.Accepts(item.Path))
+                    .Where(item => item.IsFolder || (type != null && type.Accepts(item.Path)))
                     .OrderByDescending(item => item.IsFolder).ThenBy(item => item.Label, StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
                 files.ItemsSource = entries;
@@ -100,7 +106,7 @@ namespace WorldAI
                 string path = Form.Selected(place);
                 if (path != null) safely(() => navigate(path));
             };
-            format.SelectionChanged += (sender, args) => safely(() =>
+            if (format != null) format.SelectionChanged += (sender, args) => safely(() =>
             {
                 if (saving && !String.IsNullOrWhiteSpace(name.Text) && !currentFormat().Accepts(name.Text))
                     name.Text = Path.ChangeExtension(name.Text, currentFormat().Extensions[0]);
@@ -109,12 +115,20 @@ namespace WorldAI
             files.SelectionChanged += (sender, args) =>
             {
                 var row = files.SelectedItem as FileRow;
-                if (row != null && !row.IsFolder) name.Text = Path.GetFileName(row.Path);
+                if (name != null && row != null && !row.IsFolder) name.Text = Path.GetFileName(row.Path);
             };
 
             string selected = null;
             Func<bool> accept = () =>
             {
+                if (foldersOnly)
+                {
+                    string pathChoice = Path.GetFullPath(Environment.ExpandEnvironmentVariables(
+                        Form.Required(folderInput.Text, "文件夹路径").Trim('"')));
+                    if (!Directory.Exists(pathChoice)) throw new InvalidOperationException("找不到这个文件夹。");
+                    selected = pathChoice;
+                    return true;
+                }
                 if (!String.Equals(folderInput.Text.Trim(), folder, StringComparison.OrdinalIgnoreCase))
                 {
                     navigate(folderInput.Text);
@@ -161,7 +175,7 @@ namespace WorldAI
                 if (row.IsFolder) safely(() => navigate(row.Path));
                 else submit();
             };
-            name.KeyDown += (sender, args) =>
+            if (name != null) name.KeyDown += (sender, args) =>
             {
                 if (args.Key != Key.Enter) return;
                 args.Handled = true;

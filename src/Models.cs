@@ -65,6 +65,35 @@ namespace WorldAI
             }
         }
 
+        internal static async Task<double[][]> Embed(Model api, string model, string[] input, CancellationToken token)
+        {
+            var address = new UriBuilder(Endpoint(api.Endpoint));
+            address.Path = address.Path.Substring(0, address.Path.Length - ChatPath.Length) + "/embeddings";
+            using (var request = CreateRequest(HttpMethod.Post, address.Uri, api.EncryptedKey))
+            {
+                var payload = new { model = model, input = input };
+                request.Content = new StringContent(Store.Json().Serialize(payload), Encoding.UTF8, "application/json");
+                using (var response = await Client.SendAsync(request, token))
+                {
+                    await EnsureSuccess(response);
+                    var data = Cards.Get(Store.Json().DeserializeObject(await response.Content.ReadAsStringAsync()), "data") as object[];
+                    if (data == null || data.Length != input.Length) throw new InvalidDataException("向量接口返回了不完整的数据。");
+                    var vectors = new double[input.Length][];
+                    foreach (var row in data)
+                    {
+                        var raw = Cards.Get(row, "embedding") as object[];
+                        var index = Cards.Get(row, "index");
+                        if (!(index is int) || (int)index < 0 || (int)index >= vectors.Length ||
+                            vectors[(int)index] != null || raw == null || raw.Length < 2 || raw.Length > 8192 ||
+                            raw.Any(value => !(value is int || value is long || value is decimal || value is double)))
+                            throw new InvalidDataException("向量接口的响应格式不兼容。");
+                        vectors[(int)index] = raw.Select(value => Convert.ToDouble(value)).ToArray();
+                    }
+                    return vectors;
+                }
+            }
+        }
+
         internal static async Task Generate(Model model, List<Message> messages,
             Action<string> receive, CancellationToken token, bool summarize = false, bool stream = true)
         {

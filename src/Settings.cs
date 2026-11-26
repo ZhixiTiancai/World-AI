@@ -28,6 +28,7 @@ namespace WorldAI
                 world.Settings = new Preferences {
                     DefaultModelId = Form.Selected(model), SystemPrompt = prompt.Text.Trim(),
                     DefaultProfileId = prior.DefaultProfileId, ThemeId = prior.ThemeId,
+                    SemanticApiId = prior.SemanticApiId, EmbeddingModel = prior.EmbeddingModel, BackupDirectory = prior.BackupDirectory,
                     CheckUpdatesOnStart = autoCheck.IsChecked == true,
                     HistoryCount = ReadNumber(count.Text, 1, 500, "历史条数"),
                     ContextCharacters = ReadContextLimit(limit.Text),
@@ -43,6 +44,25 @@ namespace WorldAI
                 extraVisibleMessages = 0;
                 RenderLibrary();
             }
+        }
+
+        private void EditSemanticSettings()
+        {
+            var form = new Form(Window, "语义检索设置", width: 640);
+            var api = form.Choice("提供向量接口的 API 配置", world.Models.Where(item => !item.Demo), world.Settings.SemanticApiId, "停用语义检索");
+            var name = form.Text("向量模型 ID", world.Settings.EmbeddingModel);
+            form.Note("选择支持 /embeddings 的 API，并填写该服务的向量模型 ID。检索会将相关设定片段和刚发送的玩家消息交给此服务计算向量。");
+            form.Note("保留现有关键词条目即可离线匹配。关闭此配置或检索失败时，仍使用本轮的关键词和常驻设定。");
+            if (form.Show(() =>
+            {
+                string id = Form.Selected(api), oldId = world.Settings.SemanticApiId, oldModel = world.Settings.EmbeddingModel;
+                string model = id == null ? name.Text.Trim() : Form.Required(name.Text, "向量模型 ID");
+                world.Settings.SemanticApiId = id;
+                world.Settings.EmbeddingModel = model;
+                try { Save(); }
+                catch { world.Settings.SemanticApiId = oldId; world.Settings.EmbeddingModel = oldModel; throw; }
+                return true;
+            })) RenderLibrary();
         }
 
         private static int ReadNumber(string text, int min, int max, string label)
@@ -226,7 +246,7 @@ namespace WorldAI
 
         private void Backup()
         {
-            string path = ExportFile("WorldAI 备份 (*.json)|*.json", "json", "WorldAI-backup-" + DateTime.Now.ToString("yyyyMMdd"));
+            string path = ExportFile("WorldAI 备份 (*.json)|*.json", "json", "WorldAI-backup-" + DateTime.Now.ToString("yyyyMMdd"), BackupFolder);
             if (path == null) return;
             Store.Backup(world, path);
             Info("备份已保存。");
@@ -234,9 +254,10 @@ namespace WorldAI
 
         private void Restore()
         {
-            string path = OpenFile("WorldAI 备份 (*.json)|*.json");
+            string path = OpenFile("WorldAI 备份 (*.json)|*.json", BackupFolder);
             if (path == null) return;
             var recovered = Store.Read(path);
+            recovered.Settings.BackupDirectory = world.Settings.BackupDirectory;
             if (!Confirm("用这份备份恢复本地数据？当前数据会保留一份恢复前备份。\n\n" +
                 "角色 " + recovered.Characters.Count + " 个，会话 " + recovered.Sessions.Count + " 个。")) return;
             foreach (var model in recovered.Models)
@@ -245,8 +266,8 @@ namespace WorldAI
                 model.EncryptedKey = current != null &&
                     String.Equals(current.Endpoint, model.Endpoint, StringComparison.Ordinal) ? current.EncryptedKey : null;
             }
-            Directory.CreateDirectory(Store.Folder);
-            string rollback = Path.Combine(Store.Folder, "before-restore-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".json");
+            Directory.CreateDirectory(BackupFolder);
+            string rollback = Path.Combine(BackupFolder, "before-restore-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".json");
             Store.Backup(world, rollback);
             Store.Save(recovered);
             world = recovered;

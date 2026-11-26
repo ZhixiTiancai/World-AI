@@ -376,13 +376,11 @@ namespace WorldAI
                 var userMessage = retry ? null : new Message { Role = "user", Text = composer.Text.Trim() };
                 var history = previous == null ? session.Messages.AsEnumerable() : session.Messages.Take(session.Messages.Count - 1);
                 if (userMessage != null) history = history.Concat(new[] { userMessage });
+                var recent = Context.Tail(history, session.HistoryCount ?? world.Settings.HistoryCount).ToList();
+                var hits = Context.Matches(world, session, recent);
                 int omittedMessages;
                 int omittedEntries;
-                var request = Context.Build(world, session, history, out omittedMessages, out omittedEntries);
-                var exclusions = new List<string>();
-                if (omittedMessages > 0) exclusions.Add(omittedMessages + " 条旧消息");
-                if (omittedEntries > 0) exclusions.Add(omittedEntries + " 条世界书设定");
-                string contextStatus = exclusions.Count == 0 ? "" : "达到字数上限，已略过 " + String.Join("、", exclusions);
+                var request = Context.Build(world, session, recent, hits, out omittedMessages, out omittedEntries);
 
                 if (userMessage != null)
                 {
@@ -408,9 +406,34 @@ namespace WorldAI
                 var output = AddBubble(new Message { Role = "assistant", Text = "…" }, false);
                 SetBusy(true);
                 if (!retry && session.RefocusComposer) composer.Focus();
-                SetStatus(contextStatus);
+                SetStatus("");
                 var scroller = UI<ScrollViewer>("ChatScroll");
                 scroller.ScrollToEnd();
+                var notices = new List<string>();
+                if (!model.Demo)
+                {
+                    try
+                    {
+                        var semantic = await SemanticLore.Find(world, session, recent, hits, work.Token);
+                        if (semantic.Count > 0)
+                        {
+                            hits.AddRange(semantic);
+                            request = Context.Build(world, session, recent, hits, out omittedMessages, out omittedEntries);
+                            notices.Add("语义匹配：" + String.Join("、", semantic.Select(entry => entry.Name)));
+                        }
+                    }
+                    catch (Exception error)
+                    {
+                        work.Token.ThrowIfCancellationRequested();
+                        notices.Add("本轮跳过语义检索：" + (error is OperationCanceledException ? "等待超时" : Preview(error.Message, 100)));
+                    }
+                }
+                var exclusions = new List<string>();
+                if (omittedMessages > 0) exclusions.Add(omittedMessages + " 条旧消息");
+                if (omittedEntries > 0) exclusions.Add(omittedEntries + " 条世界书设定");
+                if (exclusions.Count > 0) notices.Add("达到字数上限，已略过 " + String.Join("、", exclusions));
+                string contextStatus = String.Join("\n", notices);
+                SetStatus(contextStatus);
                 await Models.Generate(model, request, fragment =>
                 {
                     bool follow = scroller.ScrollableHeight - scroller.VerticalOffset < 52;
@@ -539,7 +562,7 @@ namespace WorldAI
         private void ExportChat()
         {
             var session = active;
-            string path = ExportFile("聊天记录 (*.txt)|*.txt|JSON (*.json)|*.json", "txt", session.Name);
+            string path = ExportFile("聊天记录 (*.txt)|*.txt|JSON (*.json)|*.json", "txt", session.Name, WorkFiles.UserFolder("聊天记录"));
             if (path == null) return;
             var role = Context.Find(world.Characters, session.CharacterId);
             var profile = Context.Player(world, session);

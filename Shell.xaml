@@ -36,6 +36,7 @@
                     <Button x:Name="NavModels" Style="{StaticResource Nav}" Content="模型设置"/>
                     <Button x:Name="NavPreferences" Style="{StaticResource Nav}" Content="全局设置"/>
                     <Button x:Name="NavData" Style="{StaticResource Nav}" Content="备份与恢复"/>
+                    <Button x:Name="NavFolders" Style="{StaticResource Nav}" Content="文件目录"/>
                 </StackPanel>
             </DockPanel>
         </Border>

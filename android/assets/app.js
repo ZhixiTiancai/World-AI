@@ -440,12 +440,12 @@ async function generate(session,value,retry) {
     const replace=retry && session.Messages[session.Messages.length-1]?.Role==='assistant';
     const input=retry ? null : {Role:'user',Text:value.trim()};
     const history=replace ? session.Messages.slice(0,-1) : session.Messages.concat(input ? [input] : []);
-    const payload=buildContext(world,session,history);
+    let payload=buildContext(world,session,history);
     if (input) {
         commit(() => { session.Messages.push(input); session.Updated=dateValue(); },false);
         drafts.delete(session.Id);
     }
-    const requestState={text:'',view:null,scroller:null,cancel:() => {}};
+    const requestState={text:'',view:null,scroller:null,aborted:false,cancel:() => {}};
     pendingChat=requestState;
     render();
     const chunk = fragment => {
@@ -469,6 +469,14 @@ async function generate(session,value,retry) {
                 chunk(part);
             }
         } else {
+            const recent=history.slice(-(session.HistoryCount || world.Settings.HistoryCount));
+            try {
+                const matched=await semanticLore(world,session,recent,keywordLore(world,session,recent),requestState);
+                if (matched.length) payload=buildContext(world,session,history,matched);
+            } catch (error) {
+                if (!requestState.aborted) notify('本轮跳过语义检索：'+error.message);
+            }
+            if (requestState.aborted) return;
             const reply=request('chat',modelConfig(model,{messages:payload.messages,stream:session.StreamReplies!==false}),chunk);
             requestState.cancel=reply.cancel;
             await reply.promise;
